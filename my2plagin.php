@@ -72,3 +72,62 @@ function reviews_plugin_form() {
     
     return ob_get_clean(); //Получает весь HTML-код, который был в буфере. очищает буфер
 }
+// Обработка отправки отзыва
+function reviews_plugin_handle_submission() {
+    if ( isset($_POST['name'], $_POST['email'], $_POST['review'], $_POST['rating']) ) {
+        global $wpdb;
+        
+        // Получаем данные из формы
+        $name = sanitize_text_field( $_POST['name'] );
+        $email = sanitize_email( $_POST['email'] );
+        $review = sanitize_textarea_field( $_POST['review'] );
+        $rating = intval( $_POST['rating'] );
+        
+        // Добавляем отзыв в базу данных
+        $table_name = $wpdb->prefix . 'reviews';
+        $wpdb->insert( 
+            $table_name, 
+            array( 
+                'name' => $name,
+                'email' => $email,
+                'review' => $review,
+                'rating' => $rating,
+            )
+        );
+        
+        echo '<p>Ваш отзыв был отправлен. Спасибо!</p>';
+    }
+}
+
+// Функция для отображения отзывов
+function reviews_plugin_display_reviews() {
+    global $wpdb;
+    $table_name = $wpdb->prefix . 'reviews';
+    
+    $reviews = $wpdb->get_results( "SELECT * FROM $table_name ORDER BY created_at DESC" );
+    
+    if ( $reviews ) {
+        foreach ( $reviews as $review ) {
+            ?>
+            <div class="review">
+                <h3><?php echo esc_html( $review->name ); ?> (Оценка: <?php echo esc_html( $review->rating ); ?>/5)</h3>
+                <p><?php echo esc_html( $review->review ); ?></p>
+                <p><small>Оставлено: <?php echo esc_html( $review->created_at ); ?></small></p>
+            </div>
+            <?php
+        }
+    } else {
+        echo '<p>Отзывов пока нет.</p>';
+    }
+}
+
+// Shortcode для отображения формы и отзывов
+function reviews_plugin_shortcode() {
+    ob_start();
+    reviews_plugin_form();
+    reviews_plugin_display_reviews();
+    return ob_get_clean();
+}
+
+add_shortcode( 'reviews_plugin', 'reviews_plugin_shortcode' );
+?>
