@@ -62,10 +62,9 @@ function get_list_car_dealers()
     return '';
 }
 
-function create_form_comments(){
+function get_form_add_review_html(){
 
-    echo '
-        <div id="wrapper_form_reviews">
+    echo '<div id="wrapper_form_reviews">
             <div>
                 <label for="review_author">
                     <input type="text" name="author" placeholder="Иван Иванов" id="review_author">
@@ -97,10 +96,12 @@ function create_form_comments(){
                     <label for="rstar_rating_5">
                         5<input type="radio" name="rstar_rating"  id="rstar_rating_5">
                     </label> 
+                    
                 </div>
                 
                  <label for="review_date">
-                    <input type="date" name="date" placeholder="01.01.2025" id="review_date">
+                    <input type="date" name="hidden_date" placeholder="01.01.2025" id="review_date" value="">
+                    <input type="hidden" name="date" id="review_date_hidden" value="">
                 </label>
                 
                  <label for="review__text">
@@ -112,10 +113,17 @@ function create_form_comments(){
                         <input type="hidden" name="car_dealer" id="car_dealer_hidden" value=""> 
                         <span id="list_select_car_dealer"></span>     
                 </div>
+                
                 <button type="submit" id="send_review" class="button">Создать отзыв</button>
+                
             </div>
-        </div>
-        
+        </div>';
+
+}
+
+function get_script_for_add_review(){
+
+    echo '
         <script type="text/javascript">
         
             function change_html_form(){
@@ -166,18 +174,18 @@ function create_form_comments(){
                     }
                 });
                  
-                 let form_review = document.getElementById( "form_review" );
-                 if( form_review ){  
-                    form_review.addEventListener( "submit", function( e ){
+                 let form_add_review = document.getElementById( "form_add_review" );
+                 if( form_add_review ){  
+                    form_add_review.addEventListener( "submit", function( e ){
                         
                         e.preventDefault();
                         
                         var reviewConnect = new Promise( function(resolve,reject){
                             
-                            var ajaxurl = "<?php echo admin_url(\'admin-ajax.php\'); ?>";
-                            var ajaxnonce = "<?php echo wp_create_nonce( \'my_ajax_nonce\' ); ?>";
+                            var ajaxurl = "' . admin_url("admin-ajax.php") . '";
+                            var ajaxnonce = "' . wp_create_nonce( "my_ajax_nonce" ) . '";
         
-                            let formData = new FormData( form_review );
+                            let formData = new FormData( form_add_review );
                             var xhr = new XMLHttpRequest();
         
                             formData.append( "ajax_nonce",ajaxnonce );
@@ -265,6 +273,32 @@ function create_form_comments(){
                 }
                 
             }
+            
+            function set_date_in_field(){
+                
+                document.body.addEventListener("change", function(event) {
+                    // Проверяем, является ли целевой элемент кнопкой с id="btn"
+                    
+                    let review_date = document.getElementById( "review_date" );
+                    var review_date_hidden = document.getElementById( "review_date_hidden" );
+                    
+                    if( review_date ){
+                        if (event.target && event.target.id === "review_date") { 
+                            
+                            var exDate = event.target.value.split();
+                            if( event.target.value !== undefined || event.target.value.length === 10 ) {
+                                exDate = event.target.value.split("-");
+                            }
+                            
+                            let partsDate = [ exDate[2], exDate[1], exDate[0] ];
+                            
+                            review_date_hidden.value = partsDate.join(".");
+                           
+                        }
+                    }
+                });
+                
+            }
         
              window.onload = function(){
                    
@@ -277,13 +311,27 @@ function create_form_comments(){
                  // Выбор дилеров и вставка в форму
                  the_select_dealers();
                  
+                 // Устанавливаем дату в нужное поле
+                 set_date_in_field();
+                 
              }   
                 
         </script>';
 
 }
 
-add_action('manage_comments_nav', 'create_form_comments',11);
+function create_form_comments(){
+
+    // Выводим HTML формы
+    get_form_add_review_html();
+
+    // Выводим скрипты обработки формы и т.д.
+    get_script_for_add_review();
+
+}
+
+
+add_action('manage_comments_nav', 'create_form_comments',11 );
 
 function anchor_form_car_dealers(){
     echo get_list_car_dealers();
@@ -307,8 +355,6 @@ function verif_fields(&$data)
     $date = isset($_POST['date']) ? sanitize_text_field($_POST['date']) : '';
     $review_text = isset($_POST['review_text']) ? sanitize_textarea_field($_POST['review_text']) : '';
     $review_dealers = isset($_POST['car_dealer']) ? sanitize_textarea_field($_POST['car_dealer']) : '';
-
-
 
     // Проверка длины строки (< 3 символов) и отсутствия опасного кода
     if (strlen($author) < 3 || hasDangerousCode($author)) {
@@ -419,17 +465,25 @@ function manual_add_comment($post_id, $data) {
 }
 
 function handle_my_custom_action(){
-
+    
     // Проверка на безопасность по полю ajax_nonce
-    if (!check_ajax_referer('my_nonce', 'ajax_nonce', false)) {
-        wp_die(json_encode(['status' => 'error', 'message' => 'Неверный nonce']));
-    }
+//    if (!check_ajax_referer('my_nonce', 'ajax_nonce', false)) {
+//        wp_die(json_encode(['status' => 'error', 'message' => 'Неверный nonce']));
+//    }
 
     $data = [];
 
     if (!verif_fields($data)){
-        wp_die( json_encode( array( 'status' => false, 'errors' => $data['errors'] ) ) );
+        $errors_data = array(
+            'status' => false,
+            'errors' => $data['errors']
+        );
+        pu_log('Верификация не пройдена');
+        pu_log($errors_data);
+        wp_die(json_encode($errors_data));
     }
+        //wp_die( json_encode( array( 'status' => false, 'errors' => $data['errors'] ) ) );
+    //}
     $list_posts = explode(',', $data['dealers']);
     foreach ($list_posts as $post_id){
         manual_add_comment($post_id, $data);
@@ -437,3 +491,218 @@ function handle_my_custom_action(){
 
     wp_die( json_encode( array( 'status' => true ) ) );
 }
+
+// Добавьте в functions.php дочерней темы или плагин
+//function add_content_before_comments_table() {
+//    echo '<div class="button" id="btn_add_custom_reviews">Добавить отзыв</div>';
+//}
+//add_action('manage_comments_nav', 'add_content_before_comments_table');
+//
+//function get_list_car_dealers()
+//{
+//    $query_tools = array(
+//        'post_type' => 'post',
+//        'showpostst' => -1
+//    );
+//    $query = get_posts($query_tools);
+//    if ($query){
+//        $car_dealers_html = '';
+//        foreach ($query as $item){
+//            setup_postdata($item);
+//            $car_dealers_html .= '
+//                <span class="car_dealer_item">
+//                    <label for="car_dealer_'.get_the_ID() . ' ">
+//                        <input type="checkbox" name="car_dealers[]" id="car_dealer_'.get_the_ID() . ' " value="'.get_the_ID() . '" data-title="'.get_the_title() . '">
+//                        <span class="car_dealer_title">'.get_the_title() . '</span>
+//                    </label>
+//                </span>
+//            ';
+//        }
+//        wp_reset_postdata();
+//        $wrapper_car_dealers_html = '
+//            <form id="wrapper_car_dealers">'. $car_dealers_html . '
+//                <button type="submit">Привязать</button>
+//                <button type="button">Закрыть</button>
+//            </form>';
+//            return $wrapper_car_dealers_html;
+//
+//    }
+//    return '';
+//}
+//
+//
+//function create_form_comments(){
+//
+//    echo '<div id="wrapper_form_reviews">
+//            <form id="form_review">
+//                <label for="review_author">
+//                    <input type="text" name="author" placeholder="Иван Иванов" id="review_author">
+//                </label>
+//
+//                 <label for="review_email">
+//                    <input type="text" name="email" placeholder="Ivan@gmail.com" id="review_email">
+//                </label>
+//
+//
+//                <div id="review_wrapper_stars">
+//
+//                    <label for="rstar_rating_1" >
+//                        1<input type="radio" name="rstar_rating"  id="rstar_rating_1">
+//                    </label>
+//
+//                    <label for="rstar_rating_2">
+//                        2<input type="radio" name="rstar_rating"  id="rstar_rating_2">
+//                    </label>
+//
+//                    <label for="rstar_rating_3">
+//                        3<input type="radio" name="rstar_rating"  id="rstar_rating_3">
+//                    </label>
+//
+//                    <label for="rstar_rating_4">
+//                        4<input type="radio" name="rstar_rating" id="rstar_rating_4">
+//                    </label>
+//
+//                    <label for="rstar_rating_5">
+//                        5<input type="radio" name="rstar_rating"  id="rstar_rating_5">
+//                    </label>
+//                </div>
+//
+//
+//                 <label for="review_date">
+//                    <input type="date" name="date" placeholder="01.01.2025" id="review_date">
+//                </label>
+//
+//                 <label for="id_text_review">
+//                    <textarea name="review_text" id="id_text_review" placeholder="Введите текст" cols="30" rows="10"></textarea>
+//                </label>
+//
+//                 <label for="text_review_telegina">
+//                        <button id="anchor_car_dealer" type="button" >Привязать к автосалону</button>
+//                        <input type="hidden" name="car_dealer" value="">
+//                        <span id="list_select_car_dealer"> </span>
+//
+//                </label>
+//                <div id="selected_car_dealer">
+//
+//
+//                </div>
+//                <button type="submit" id="send_review">Создать отзыв</button>
+//            </form>
+//        </div>
+//        '.get_list_car_dealers() . '
+//        <script type="text/javascript">
+//
+//             window.onload = function(){
+//
+//                 // Дотягиваемся до кнопки "Добавить отзыв"
+//                 let btn_add_custom_reviews = document.getElementById("btn_add_custom_reviews");
+//
+//                 // Берём блок-обёртку формы отзывов
+//                 let wrapper_form_reviews = document.getElementById("wrapper_form_reviews");
+//                 document.getElementById("wrapper_form_reviews").remove();
+//
+//                 // Берём линию с кнопками
+//                 let form_comment = document.querySelector( "#comments-form .tablenav.top" );
+//
+//                 let wp_list_table = document.querySelector( "body.edit-comments-php table.wp-list-table" );
+//                 console.log( wp_list_table );
+//                 if( wp_list_table && wrapper_form_reviews ){
+//                     wp_list_table.before( wrapper_form_reviews );
+//                 }
+//
+//                 // Вешаем на кнопку "Добавить отзыв" событие "клик"
+//                 if( btn_add_custom_reviews ){
+//
+//                     btn_add_custom_reviews.addEventListener( "click", function(){
+//
+//                         // Добавляем класс active - он позволит открыть блок с формой добавления отзывов
+//                         wrapper_form_reviews.classList.add( "active" );
+//
+//                         // Добавляем класс к линии с кнопками
+//                         form_comment.classList.add("active_form" );
+//                     } );
+//
+//                 }
+//
+//                 let form_review = document.getElementById( "form_review" );
+//                 if( form_review ){
+//
+//                    form_review.addEventListener( "submit", function( e ){
+//
+//                        e.preventDefault();
+//
+//                        var reviewConnect = new Promise( function(resolve,reject){
+//
+/*                            var ajaxurl = "<?php echo admin_url(\'admin-ajax.php\'); ?>";*/
+/*                            var ajaxnonce = "<?php echo wp_create_nonce( \'my_ajax_nonce\' ); ?>";*/
+//
+//                            let formData = new FormData( form_review );
+//                            var xhr = new XMLHttpRequest();
+//
+//                            formData.append( "ajax_nonce",ajaxnonce );
+//                            formData.append( "action", "action_review");
+//
+//                            xhr.open("POST", ajaxurl, true);
+//                            xhr.responseType = "json";
+//                            xhr.send(formData);
+//
+//                            resolve(xhr);
+//                         })
+//
+//                        reviewConnect.then( function( xhr ){
+//                            xhr.onreadystatechange = function(){
+//                                if( xhr.readyState == 4 ){
+//                                    // Здесь мы добавим форму ответа
+//                                }
+//                            }
+//                        })
+//
+//                    } );
+//
+//                }
+//
+//             }
+//
+//        </script>';
+//
+//}
+//
+//add_action('manage_comments_nav', 'create_form_comments',11);
+//
+//
+//add_action('admin_enqueue_scripts', 'my_enque_telegina');
+//
+//
+//
+//// Использование:
+////$plugin_url = get_plugin_url(__FILE__);
+//function my_enque_telegina(){
+//    wp_enqueue_style('my-style', plugins_url('assets/css/my.css',__FILE__));
+//}
+//
+//// Обработка AJAX для авторизованных пользователей
+//add_action('wp_ajax_action_review', 'handle_my_custom_action');
+//// Обработка AJAX для неавторизованных пользователей
+////add_action('wp_ajax_nopriv_my_custom_action', 'handle_my_custom_action');
+//
+//function handle_my_custom_action() {
+//    // Получаем данные из POST-запроса
+//    $date = isset($_POST['date']) ? sanitize_text_field($_POST['date']) : '';
+//    $review_text = isset($_POST['review_text']) ? sanitize_textarea_field($_POST['review_text']) : '';
+//    $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+//    $author = isset($_POST['author']) ? sanitize_text_field($_POST['author']) : '';
+//    //$data = isset($_POST['review_text']) ? sanitize_text_field($_POST['review_text']) : '';
+//    $
+//
+//    // Выполняем какую-то логику
+//    $response = array(
+//        'status' => 'success',
+//        'message' => 'Вы отправили: ' . $date,
+//    );
+//
+//    // Возвращаем ответ в формате JSON
+//    wp_send_json($response);
+//
+//    // Завершаем выполнение скрипта
+//    wp_die();
+//}
